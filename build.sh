@@ -28,17 +28,10 @@ clean() {
 }
 
 check_deps() {
-    local deps=("archiso" "mkarchiso" "pacman" "xorriso" "squashfs-tools")
+    local deps=("mkarchiso" "pacman" "xorriso" "mksquashfs")
     for dep in "${deps[@]}"; do
-        if ! command -v "${dep}" &>/dev/null; then
-            case "${dep}" in
-                archiso|mkarchiso)
-                    err "${dep} não encontrado. Instale com: sudo pacman -S archiso"
-                    ;;
-                *)
-                    warn "${dep} não encontrado. Instale com: sudo pacman -S ${dep}"
-                    ;;
-            esac
+        if ! command -v "${dep}" &>/dev/null && ! command -v "/usr/bin/${dep}" &>/dev/null; then
+            err "${dep} não encontrado. Instale archiso: sudo pacman -S archiso"
         fi
     done
     log "Dependências OK"
