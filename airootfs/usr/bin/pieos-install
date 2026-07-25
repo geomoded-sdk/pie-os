@@ -1,0 +1,439 @@
+#!/usr/bin/env bash
+#=============================================================================
+# Pie OS Installer - Instala o Pie OS no disco
+# Roda dentro do live CD. Interface via whiptail/dialog.
+#=============================================================================
+
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+
+DIALOG=${DIALOG:-whiptail}
+TITLE="Pie OS Installer"
+PIEOS_USER="pieos"
+PIEOS_PASS="piebox"
+HOSTNAME="piebox"
+
+[[ $EUID -ne 0 ]] && echo -e "${RED}Execute como root: sudo pieos-install${NC}" && exit 1
+
+log()  { echo -e "${GREEN}[PIEOS]${NC} $1"; }
+warn() { echo -e "${YELLOW}[AVISO]${NC} $1"; }
+err()  { echo -e "${RED}[ERRO]${NC} $1"; exit 1; }
+
+# Detectar modo UEFI ou BIOS
+detect_boot() {
+    if [ -d /sys/firmware/efi ]; then
+        BOOTMODE="uefi"
+    else
+        BOOTMODE="bios"
+    fi
+    log "Modo de boot detectado: ${BOOTMODE}"
+}
+
+# Selecionar disco
+select_disk() {
+    local disks=()
+    local tmp=$(mktemp)
+    lsblk -dno NAME,SIZE,TYPE,MODEL | while read name size type model; do
+        [[ "$type" != "disk" ]] && continue
+        echo "$name|$size|$model"
+    done > "$tmp"
+
+    local menu_items=()
+    while IFS='|' read name size model; do
+        menu_items+=("$name" "${size} - ${model}" OFF)
+    done < "$tmp"
+
+    if [ ${#menu_items[@]} -eq 0 ]; then
+        err "Nenhum disco encontrado!"
+    fi
+
+    local chosen
+    chosen=$($DIALOG --title "$TITLE" --radiolist \
+        "Selecione o disco para instalar o Pie OS\nTODOS OS DADOS SERÃO APAGADOS!" \
+        18 60 8 "${menu_items[@]}" 3>&1 1>&2 2>&3)
+
+    [ -z "$chosen" ] && err "Instalação cancelada."
+    INSTALL_DISK="/dev/$chosen"
+    log "Disco selecionado: $INSTALL_DISK"
+}
+
+# Confirmar instalação
+confirm_install() {
+    local disk_info=$(lsblk -dno SIZE,MODEL "$INSTALL_DISK" 2>/dev/null | tr -s ' ')
+    $DIALOG --title "$TITLE" --yesno \
+        "ATENÇÃO! Isso vai APAGAR TODOS OS DADOS em:\n\
+$INSTALL_DISK ($disk_info)\n\n\
+• Sistema: Pie OS\n\
+• Boot: $BOOTMODE\n\
+• Usuário: $PIEOS_USER\n\
+• Hostname: $HOSTNAME\n\n\
+Tem certeza que deseja continuar?" \
+        16 60 || err "Instalação cancelada."
+}
+
+# Particionar disco
+partition_disk() {
+    log "Particionando $INSTALL_DISK..."
+    log "Removendo todas as partições..."
+    wipefs -a "$INSTALL_DISK"
+    sgdisk -Z "$INSTALL_DISK" || true
+
+    if [ "$BOOTMODE" = "uefi" ]; then
+        log "Criando tabela GPT com partição EFI..."
+        sgdisk -o "$INSTALL_DISK"
+        sgdisk -n 1:0:+512M -t 1:ef00 -c 1:"EFI" "$INSTALL_DISK"
+        sgdisk -n 2:0:0 -t 2:8300 -c 2:"PieOS" "$INSTALL_DISK"
+        EFI_PART="${INSTALL_DISK}1"
+        ROOT_PART="${INSTALL_DISK}2"
+    else
+        log "Criando tabela MBR com partição única..."
+        sgdisk -o "$INSTALL_DISK"
+        sgdisk -n 1:0:0 -t 1:8300 -c 1:"PieOS" "$INSTALL_DISK"
+        ROOT_PART="${INSTALL_DISK}1"
+        EFI_PART=""
+    fi
+
+    partprobe "$INSTALL_DISK"
+    sleep 2
+    log "Partições criadas com sucesso."
+}
+
+# Formatar partições
+format_partitions() {
+    if [ -n "$EFI_PART" ]; then
+        log "Formatando partição EFI (FAT32)..."
+        mkfs.fat -F32 -n "PIEOS_EFI" "$EFI_PART"
+    fi
+
+    log "Formatando partição raiz (ext4)..."
+    mkfs.ext4 -F -L "PIEOS_ROOT" "$ROOT_PART"
+    log "Formatação concluída."
+}
+
+# Montar partições
+mount_partitions() {
+    log "Montando partições..."
+    mkdir -p /mnt/pieos
+    mount "$ROOT_PART" /mnt/pieos
+
+    if [ -n "$EFI_PART" ]; then
+        mkdir -p /mnt/pieos/boot
+        mount "$EFI_PART" /mnt/pieos/boot
+    fi
+
+    log "Partições montadas em /mnt/pieos"
+}
+
+# Instalar sistema base
+install_base() {
+    log "Instalando sistema base Arch Linux..."
+    log "Este processo pode levar alguns minutos..."
+
+    pacstrap /mnt/pieos base base-devel linux linux-firmware linux-headers \
+        grub efibootmgr networkmanager wpa_supplicant wireless_tools dhcpcd \
+        xorg-server xorg-xinit xorg-xrandr mesa libgl xf86-video-intel \
+        pipewire pipewire-pulse pipewire-alsa wireplumber alsa-utils \
+        python python-pyqt5 python-evdev qt5-base \
+        plymouth sudo which git wget curl nano \
+        joystick steam-devices gamemode \
+        ttf-dejavu ttf-liberation noto-fonts \
+        acpi acpid htop fastfetch
+
+    log "Sistema base instalado!"
+}
+
+# Configurar sistema
+configure_system() {
+    log "Configurando sistema..."
+
+    # Fstab
+    genfstab -U /mnt/pieos > /mnt/pieos/etc/fstab
+
+    # Hostname
+    echo "$HOSTNAME" > /mnt/pieos/etc/hostname
+
+    # Timezone
+    arch-chroot /mnt/pieos ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
+    arch-chroot /mnt/pieos hwclock --systohc
+
+    # Locale
+    echo "pt_BR.UTF-8 UTF-8" > /mnt/pieos/etc/locale.gen
+    echo "en_US.UTF-8 UTF-8" >> /mnt/pieos/etc/locale.gen
+    arch-chroot /mnt/pieos locale-gen
+    echo "LANG=pt_BR.UTF-8" > /mnt/pieos/etc/locale.conf
+
+    # Hosts
+    cat > /mnt/pieos/etc/hosts << 'EOF'
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   piebox
+EOF
+
+    # Mkinitcpio com Plymouth
+    sed -i 's/HOOKS=.*/HOOKS=(base udev autodetect modconf block plymouth filesystems keyboard fsck)/' \
+        /mnt/pieos/etc/mkinitcpio.conf
+    arch-chroot /mnt/pieos mkinitcpio -P
+
+    log "Configurações básicas aplicadas."
+}
+
+# Copiar configurações do Pie OS
+install_pieos_configs() {
+    log "Copiando configurações do Pie OS..."
+
+    # Criar usuário
+    arch-chroot /mnt/pieos useradd -m -G wheel,audio,video,input,games "$PIEOS_USER" 2>/dev/null || true
+    echo "${PIEOS_USER}:${PIEOS_PASS}" | chpasswd -R /mnt/pieos
+    echo "root:${PIEOS_PASS}" | chpasswd -R /mnt/pieos
+
+    # Sudo
+    echo "%wheel ALL=(ALL:ALL) ALL" > /mnt/pieos/etc/sudoers.d/wheel
+
+    # NetworkManager
+    arch-chroot /mnt/pieos systemctl enable NetworkManager
+    arch-chroot /mnt/pieos systemctl enable bluetooth
+    arch-chroot /mnt/pieos systemctl enable acpid
+    arch-chroot /mnt/pieos systemctl enable pwrstatd 2>/dev/null || true
+
+    # Plymouth
+    arch-chroot /mnt/pieos systemctl enable plymouth-start
+
+    # Pie OS target (boot direto na interface)
+    mkdir -p /mnt/pieos/etc/systemd/system/pieos.target.wants
+    arch-chroot /mnt/pieos systemctl enable getty@tty1 2>/dev/null || true
+    arch-chroot /mnt/pieos systemctl set-default multi-user.target 2>/dev/null || true
+
+    # Auto-login
+    mkdir -p /mnt/pieos/etc/systemd/system/getty@tty1.service.d
+    cat > /mnt/pieos/etc/systemd/system/getty@tty1.service.d/autologin.conf << 'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin pieos --noclear %I 38400 linux
+Type=idle
+EOF
+
+    # Udev rules para joystick
+    mkdir -p /mnt/pieos/etc/udev/rules.d
+    cat > /mnt/pieos/etc/udev/rules.d/99-joystick.rules << 'RULEEOF'
+SUBSYSTEM=="input", ENV{ID_INPUT_JOYSTICK}=="1", MODE="0666"
+KERNEL=="js[0-9]*", MODE="0666"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", MODE="0666"
+SUBSYSTEM=="input", ATTRS{idVendor}=="054c", MODE="0666"
+SUBSYSTEM=="input", ATTRS{idVendor}=="057e", MODE="0666"
+SUBSYSTEM=="input", ATTRS{idVendor}=="046d", MODE="0666"
+RULEEOF
+
+    # Xenia run script
+    cat > /mnt/pieos/usr/bin/xenia-run << 'XENIAEOF'
+#!/usr/bin/env bash
+exec /opt/xenia-canary/xenia-canary "$@"
+XENIAEOF
+    chmod +x /mnt/pieos/usr/bin/xenia-run
+
+    # Criar diretórios de jogos
+    arch-chroot /mnt/pieos mkdir -p /home/"$PIEOS_USER"/{Games,Apps,Roms,.config/pieos}
+    arch-chroot /mnt/pieos chown -R "$PIEOS_USER:$PIEOS_USER" /home/"$PIEOS_USER"
+}
+
+# Instalar o Pie OS Shell (UI)
+install_pieos_shell() {
+    log "Instalando interface Pie OS Shell..."
+
+    local ui_dir="/mnt/pieos/usr/share/pieos/shell"
+    mkdir -p "$ui_dir"
+
+    cat > "$ui_dir/main.py" << 'PYEOF'
+#!/usr/bin/env python3
+#=============================================================================
+# Pie OS Shell - Interface estilo Xbox 360
+#=============================================================================
+import sys, os, subprocess, glob, threading, signal
+from datetime import datetime
+from pathlib import Path
+from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QFont, QColor, QPainter, QBrush, QLinearGradient, QPixmap, QFontDatabase
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QStackedWidget, QGridLayout, QScrollArea, QFrame, QListWidget,
+    QListWidgetItem, QSlider, QMessageBox, QDialog, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem)
+
+C = {"bg":"#1a1a1a","bg_card":"#222222","bg_blade":"#2a2a2a","accent":"#A8D854",
+     "accent_dark":"#7AB832","accent_glow":"#C8F066","text":"#FFFFFF","text_dim":"#999999",
+     "text_muted":"#666666","border":"#333333","border_focus":"#A8D854","blade_inactive":"#3a3a3a"}
+
+def shadow(r=12):
+    s=QGraphicsDropShadowEffect(); s.setBlurRadius(r); s.setColor(QColor(0,0,0,80)); s.setOffset(2,2); return s
+
+class BladePanel(QWidget):
+    bladeChanged=pyqtSignal(int)
+    def __init__(self, blades, p=None):
+        super().__init__(p); self.blades=blades; self.current=0; self.hovered=-1; self.setFixedHeight(85)
+        self.setMouseTracking(True)
+    def paintEvent(self, e):
+        p=QPainter(self); p.setRenderHint(QPainter.Antialiasing); w,h=self.width(),self.height()
+        p.fillRect(self.rect(), QColor(C["bg_blade"]))
+        bw,bl,t=180,50,len(self.blades); sx=(w-t*bw)//2; by=(h-bl)//2-2; r=10
+        for i,b in enumerate(self.blades):
+            bx=sx+i*bw; act=(i==self.current); hv=(i==self.hovered)
+            path=type(p.__class__)(); path.addRoundedRect(bx,by,bw-8,bl,r,r)
+            if act:
+                g=QLinearGradient(bx,by,bx,by+bl); g.setColorAt(0,QColor(C["accent_glow"])); g.setColorAt(1,QColor(C["accent_dark"]))
+                p.fillPath(path,QBrush(g))
+            elif hv: p.fillPath(path,QColor("#4a4a4a"))
+            else: p.fillPath(path,QColor(C["blade_inactive"]))
+            p.setPen(QColor(C["bg"] if act else C["text_dim"]))
+            f=QFont("Segoe UI",14 if act else 13,QFont.Bold if act else QFont.Normal); p.setFont(f)
+            p.drawText(QRect(bx,by,bw-8,bl),Qt.AlignCenter,b)
+    def mouseMoveEvent(self, e): self.hovered=-1; self.update()
+    def mousePressEvent(self, e): pass
+    def set_blade(self,i):
+        if i!=self.current: self.current=i; self.bladeChanged.emit(i); self.update()
+
+class GamesPage(QWidget):
+    launch=pyqtSignal(str)
+    def __init__(self,p=None):
+        super().__init__(p); self.games=[]; self.setup(); self.scan()
+    def setup(self):
+        l=QVBoxLayout(self); l.setContentsMargins(50,25,50,25)
+        h=QHBoxLayout(); t=QLabel("Biblioteca de Jogos")
+        t.setStyleSheet(f"color:{C['text']};font-size:28px;font-weight:bold;"); h.addWidget(t); h.addStretch()
+        rf=QPushButton("Atualizar"); rf.setStyleSheet(f"background:{C['accent']};color:{C['bg']};border:none;border-radius:8px;padding:8px 20px;font-weight:bold;")
+        rf.clicked.connect(self.scan); h.addWidget(rf); l.addLayout(h)
+        scr=QScrollArea(); scr.setWidgetResizable(True); scr.setStyleSheet("QScrollArea{border:none;} QScrollBar:vertical{background:#1a1a1a;width:6px;} QScrollBar::handle:vertical{background:#A8D854;border-radius:3px;}")
+        self.gw=QWidget(); self.grid=QGridLayout(self.gw); self.grid.setSpacing(16)
+        scr.setWidget(self.gw); l.addWidget(scr)
+    def scan(self):
+        for i in reversed(range(self.grid.count())): w=self.grid.itemAt(i).widget(); w and w.deleteLater()
+        self.games=[]; r=c=0
+        for d in [os.path.expanduser("~/Games"),os.path.expanduser("~/Apps")]:
+            if not os.path.isdir(d): continue
+            for ext in ["*.AppImage","*.appimage","*.xex","*.XEX"]:
+                for fp in sorted(glob.glob(os.path.join(d,"**",ext),recursive=True)):
+                    card=QFrame(); card.setFixedSize(200,240); card.setStyleSheet("QFrame{background:#222222;border:2px solid #333333;border-radius:16px;} QFrame:hover{border:2px solid #A8D854;}")
+                    cl=QVBoxLayout(card); cl.setContentsMargins(10,10,10,10)
+                    ic=QLabel(""); ic.setFixedHeight(140); ic.setStyleSheet(f"background:qradialgradient(cx:0.5,cy:0.5,radius:0.8,stop:0 #1a1a1a,stop:1 #333333);border-radius:12px;border:1px solid #333333;")
+                    il=QVBoxLayout(ic); em=QLabel({".appimage":"📦",".xex":"🎮"}.get(Path(fp).suffix.lower(),"🎮")); em.setAlignment(Qt.AlignCenter); em.setStyleSheet("font-size:42px;"); il.addWidget(em); cl.addWidget(ic)
+                    nl=QLabel(Path(fp).stem); nl.setAlignment(Qt.AlignCenter); nl.setStyleSheet(f"color:{C['text']};font-size:12px;font-weight:bold;background:transparent;"); cl.addWidget(nl)
+                    card.mousePressEvent=lambda e,p=fp: self.launch.emit(p); self.grid.addWidget(card,r,c)
+                    self.games.append(fp); c+=1
+                    if c>=4: c=0; r+=1
+
+class PieOSShell(QMainWindow):
+    def __init__(self):
+        super().__init__(); self.blade_names=["Início","Jogos"]; self.setup_window(); self.setup_ui(); self.setup_timers()
+    def setup_window(self):
+        self.setWindowTitle("Pie OS"); self.setWindowFlags(Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint)
+        self.showFullScreen(); self.setCursor(Qt.BlankCursor); self.setStyleSheet(f"background:{C['bg']};")
+    def setup_ui(self):
+        mw=QWidget(); self.setCentralWidget(mw); ml=QVBoxLayout(mw); ml.setContentsMargins(0,0,0,0); ml.setSpacing(0)
+        self.bp=BladePanel(self.blade_names); self.bp.bladeChanged.connect(self.switch_blade); ml.addWidget(self.bp)
+        self.stack=QStackedWidget()
+        self.gp=GamesPage(); self.gp.launch.connect(self.launch_file)
+        self.stack.addWidget(self.gp); ml.addWidget(self.stack,1)
+        bar=QFrame(); bar.setFixedHeight(40); bar.setStyleSheet(f"background:{C['bg_blade']};border-top:1px solid {C['border']};")
+        bl=QHBoxLayout(bar); bl.setContentsMargins(20,0,20,0)
+        h=QLabel("Pie OS - Aperte F12 para desligar"); h.setStyleSheet(f"color:{C['text_muted']};font-size:11px;"); bl.addWidget(h); bl.addStretch()
+        self.cl=QLabel("00:00"); self.cl.setStyleSheet(f"color:{C['text']};font-size:13px;font-weight:bold;"); bl.addWidget(self.cl); ml.addWidget(bar)
+    def setup_timers(self):
+        t=QTimer(self); t.timeout.connect(lambda: self.cl.setText(datetime.now().strftime("%H:%M"))); t.start(1000)
+    def switch_blade(self,i): self.stack.setCurrentIndex(i)
+    def launch_file(self,path):
+        ext=Path(path).suffix.lower(); self.hide()
+        try:
+            if ext==".appimage": os.chmod(path,0o755); subprocess.run([path],timeout=600)
+            elif ext==".xex": subprocess.run(["/usr/bin/xenia-run",path])
+        except: pass
+        finally: self.showFullScreen()
+    def keyPressEvent(self,e):
+        k=e.key()
+        if k==Qt.Key_F12:
+            if QMessageBox.question(self,"Pie OS","Desligar?",QMessageBox.Yes|QMessageBox.No)==QMessageBox.Yes: subprocess.run(["poweroff"])
+        elif k==Qt.Key_Left: self.switch_blade(0)
+        elif k==Qt.Key_Right: self.switch_blade(1)
+        elif k==Qt.Key_Escape: self.switch_blade(0)
+
+def main():
+    signal.signal(signal.SIGINT,signal.SIG_DFL)
+    app=QApplication(sys.argv); app.setFont(QFont("Segoe UI",10))
+    w=PieOSShell(); w.show(); sys.exit(app.exec_())
+if __name__=="__main__": main()
+PYEOF
+
+    # Launcher script
+    cat > /mnt/pieos/usr/bin/pieos-launcher << 'LAUNCHER'
+#!/usr/bin/env bash
+export DISPLAY=:0
+export QT_QPA_PLATFORM=xcb
+export MESA_GL_VERSION_OVERRIDE=3.3
+cd /usr/share/pieos/shell
+exec python3 main.py
+LAUNCHER
+    chmod +x /mnt/pieos/usr/bin/pieos-launcher
+
+    # .bashrc do usuário para auto-start
+    cat >> /mnt/pieos/home/"$PIEOS_USER"/.bashrc << 'BASHRC'
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    startx /usr/bin/pieos-launcher
+fi
+BASHRC
+}
+
+# Instalar GRUB
+install_grub() {
+    log "Instalando GRUB..."
+
+    if [ "$BOOTMODE" = "uefi" ]; then
+        arch-chroot /mnt/pieos grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=PIEOS --recheck
+    else
+        arch-chroot /mnt/pieos grub-install --target=i386-pc "$INSTALL_DISK" --recheck
+    fi
+
+    # Configurar GRUB com Plymouth
+    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash vt.global_cursor_default=0 loglevel=3"/' \
+        /mnt/pieos/etc/default/grub
+    arch-chroot /mnt/pieos grub-mkconfig -o /boot/grub/grub.cfg
+
+    log "GRUB instalado e configurado."
+}
+
+# Finalizar
+finish() {
+    # Desmontar
+    sync
+    umount -R /mnt/pieos 2>/dev/null || true
+
+    $DIALOG --title "$TITLE" --msgbox \
+        "Pie OS instalado com sucesso!\n\n\
+Remova o pendrive e reinicie.\n\n\
+Usuário: $PIEOS_USER\n\
+Senha:   $PIEOS_PASS\n\n\
+Boot será direto na interface Pie OS!" \
+        14 50
+
+    log "Instalação concluída! Remova o pendrive e reinicie."
+}
+
+#=============================================================================
+# MAIN
+#=============================================================================
+
+clear
+echo -e "${CYAN}"
+echo "  ╔══════════════════════════════╗"
+echo "  ║       Pie OS Installer       ║"
+echo "  ║   Console System para PieBox ║"
+echo "  ╚══════════════════════════════╝"
+echo -e "${NC}"
+
+detect_boot
+select_disk
+confirm_install
+partition_disk
+format_partitions
+mount_partitions
+install_base
+configure_system
+install_pieos_configs
+install_pieos_shell
+install_grub
+finish

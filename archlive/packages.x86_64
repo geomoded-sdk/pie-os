@@ -63,6 +63,11 @@ sudo
 which
 htop
 nano
+dialog
+whiptail
+parted
+gptfdisk
+dosfstools
 
 # === CONTROLES ===
 joystick
@@ -84,5 +89,4 @@ unzip
 zip
 p7zip
 ntfs-3g
-dosfstools
 fastfetch
