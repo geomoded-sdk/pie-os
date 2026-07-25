@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+      options: --cap-add=SYS_ADMIN
 
     steps:
       - name: Checkout
@@ -19,15 +20,17 @@ jobs:
         run: |
           pacman-key --init
           pacman-key --populate archlinux
+          echo "keyserver hkp://keyserver.ubuntu.com:80" >> /etc/pacman.d/gnupg/gpg.conf
           echo "ParallelDownloads = 5" >> /etc/pacman.conf
-          pacman -Sy --noconfirm archiso base-devel git squashfs-tools xorriso
-          pacman -Scc --noconfirm
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm archiso base-devel git squashfs-tools xorriso
+        shell: bash
 
       - name: Build ISO
         run: |
           chmod +x build.sh
-          mkdir -p out
           bash build.sh build
+        shell: bash
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
