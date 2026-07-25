@@ -25,8 +25,9 @@ jobs:
 
       - name: Build ISO
         run: |
+          chmod +x build.sh
           mkdir -p out
-          ./build.sh build
+          bash build.sh build
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
