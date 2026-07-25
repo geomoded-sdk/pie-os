@@ -64,7 +64,7 @@ which
 htop
 nano
 dialog
-whiptail
+libnewt
 parted
 gptfdisk
 dosfstools
