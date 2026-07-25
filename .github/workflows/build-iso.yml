@@ -25,7 +25,7 @@ jobs:
               echo "keyserver hkp://keyserver.ubuntu.com:80" >> /etc/pacman.d/gnupg/gpg.conf
               echo "ParallelDownloads = 5" >> /etc/pacman.conf
               pacman -Syu --noconfirm
-              pacman -S --noconfirm archiso base-devel git squashfs-tools xorriso grub mtools
+              pacman -S --noconfirm archiso base-devel git squashfs-tools xorriso
               mkdir -p out
               bash build.sh build
             '
