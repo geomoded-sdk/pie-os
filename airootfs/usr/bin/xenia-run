@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+#=============================================================================
+# Xenia Canary Launcher para Pie OS
+# Executa arquivos .xex (Xbox 360) direto no emulador Xenia Canary
+#=============================================================================
+
+set -euo pipefail
+
+XENIA_DIR="/opt/xenia-canary"
+XENIA_BIN="${XENIA_DIR}/xenia-canary"
+XENIA_CONFIG="${XENIA_DIR}/xenia.config.toml"
+PIEOS_CONFIG="/home/pieos/.config/pieos"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+show_help() {
+    echo -e "${CYAN}PieOS Xenia Canary Launcher${NC}"
+    echo ""
+    echo "Uso: xenia-run [opções] <arquivo.xex>"
+    echo ""
+    echo "Opções:"
+    echo "  --help          Mostra esta ajuda"
+    echo "  --install       Instala/busca Xenia Canary"
+    echo "  --update        Atualiza Xenia Canary"
+    echo "  --config        Abre configurações do Xenia"
+    echo "  --list          Lista jogos instalados"
+    echo ""
+    echo "Exemplos:"
+    echo "  xenia-run jogo.xex"
+    echo "  xenia-run --install"
+}
+
+install_xenia() {
+    echo -e "${YELLOW}Instalando Xenia Canary...${NC}"
+
+    sudo mkdir -p "${XENIA_DIR}"
+    local LATEST_URL=$(curl -s https://api.github.com/repos/xenia-canary/xenia-canary/releases/latest \
+        | grep "browser_download_url.*xenia_canary.zip" \
+        | cut -d '"' -f 4)
+
+    if [ -z "${LATEST_URL}" ]; then
+        echo -e "${RED}Não foi possível obter a URL do Xenia Canary.${NC}"
+        echo "Baixe manualmente de: https://github.com/xenia-canary/xenia-canary/releases"
+        exit 1
+    fi
+
+    local tmp_dir=$(mktemp -d)
+    curl -L "${LATEST_URL}" -o "${tmp_dir}/xenia-canary.zip"
+    sudo unzip -o "${tmp_dir}/xenia-canary.zip" -d "${XENIA_DIR}"
+    sudo chmod +x "${XENIA_BIN}"
+    rm -rf "${tmp_dir}"
+
+    # Configurações otimizadas para Intel HD 3000
+    write_xenia_config
+
+    echo -e "${GREEN}Xenia Canary instalado em ${XENIA_DIR}${NC}"
+}
+
+write_xenia_config() {
+    mkdir -p "${PIEOS_CONFIG}"
+    cat > "${PIEOS_CONFIG}/xenia.config.toml" << 'XENIAEOF'
+# Pie OS - Xenia Canary Configuração Otimizada
+# Para Intel HD Graphics 3000 / i3
+
+gpu = "d3d12"                     # Usar D3D12 (mais compatível)
+vsync = false                     # Desligar vsync para mais FPS
+framerate_limit = false           # Sem limite de FPS
+fullscreen = true                 # Tela cheia
+windowed = false
+draw_resolution_scale_x = 1       # Resolução nativa (sem escala)
+draw_resolution_scale_y = 1
+postprocess = false               # Desligar pós-processamento
+gamma_render_target_as_srgb = false
+protect_zero_restore = false
+protect_zero_restore_invalid = false
+cpu_relaxed = true                # Otimizações para CPU fraca
+cpu_break_on_unimplemented = false
+pix_mem_use_fnv128 = false
+pix_mem_use_fnv64 = false
+storage_provider = "pix"
+enable_snapshot = false
+XENIAEOF
+
+    sudo cp "${PIEOS_CONFIG}/xenia.config.toml" "${XENIA_CONFIG}"
+}
+
+run_game() {
+    local game_file="$1"
+
+    if [ ! -f "${XENIA_BIN}" ]; then
+        echo -e "${YELLOW}Xenia Canary não encontrado. Instalando...${NC}"
+        install_xenia
+    fi
+
+    if [ ! -f "${game_file}" ]; then
+        echo -e "${RED}Arquivo não encontrado: ${game_file}${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Iniciando: ${game_file}${NC}"
+    echo -e "${CYAN}Pressione ESC para sair do Xenia${NC}"
+
+    # Configurações temporárias para Intel HD 3000
+    export __GL_THREADED_OPTIMIZATIONS=1
+    export mesa_glthread=true
+    export DRI_PRIME=0
+
+    # Executar Xenia Canary
+    "${XENIA_BIN}" --config="${PIEOS_CONFIG}/xenia.config.toml" "${game_file}"
+    local exit_code=$?
+
+    if [ ${exit_code} -ne 0 ]; then
+        echo -e "${RED}Xenia Canary fechou com código: ${exit_code}${NC}"
+    fi
+
+    return ${exit_code}
+}
+
+list_games() {
+    local search_dirs=(
+        "/home/pieos/Games"
+        "/home/pieos/Downloads"
+        "/mnt"
+        "/media"
+    )
+
+    echo -e "${CYAN}Jogos Xbox 360 (.xex) encontrados:${NC}"
+    local found=0
+    for dir in "${search_dirs[@]}"; do
+        if [ -d "${dir}" ]; then
+            while IFS= read -r -d '' file; do
+                echo "  ${file}"
+                found=$((found + 1))
+            done < <(find "${dir}" -name "*.xex" -type f -print0 2>/dev/null)
+        fi
+    done
+
+    if [ ${found} -eq 0 ]; then
+        echo "  Nenhum jogo .xex encontrado."
+        echo "  Coloque seus jogos em: ~/Games/"
+    else
+        echo "Total: ${found} jogos"
+    fi
+}
+
+case "${1:-help}" in
+    --install|-i)
+        install_xenia
+        ;;
+    --update|-u)
+        install_xenia
+        ;;
+    --config|-c)
+        write_xenia_config
+        echo -e "${GREEN}Configuração salva em ${PIEOS_CONFIG}/xenia.config.toml${NC}"
+        ;;
+    --list|-l)
+        list_games
+        ;;
+    --help|-h)
+        show_help
+        ;;
+    *)
+        if [ -f "${1:-}" ]; then
+            run_game "$1"
+        else
+            show_help
+        fi
+        ;;
+esac

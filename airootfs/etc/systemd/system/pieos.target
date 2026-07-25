@@ -1,0 +1,8 @@
+[Unit]
+Description=Pie OS Console Mode
+Requires=multi-user.target
+Wants=getty@tty1.service
+After=multi-user.target plymouth-start.service
+
+[Install]
+Alias=default.target

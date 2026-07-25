@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#=============================================================================
+# Pie OS Launcher
+# Inicia a interface do console PieBox (estilo Xbox 360)
+#=============================================================================
+
+set -euo pipefail
+
+# Configurações do sistema
+export PIEOS_HOME="/home/pieos"
+export PIEOS_APPS="${PIEOS_HOME}/Apps"
+export PIEOS_GAMES="${PIEOS_HOME}/Games"
+export PIEOS_ROMS="${PIEOS_HOME}/Roms"
+export PIEOS_CONFIG="${PIEOS_HOME}/.config/pieos"
+export PIEOS_CACHE="${PIEOS_HOME}/.cache/pieos"
+export PIEOS_THEME="${PIEOS_HOME}/.config/pieos/theme"
+export XDG_CONFIG_HOME="${PIEOS_HOME}/.config"
+export XDG_DATA_HOME="${PIEOS_HOME}/.local/share"
+
+# Garantir diretórios do usuário
+sudo -u pieos mkdir -p "${PIEOS_APPS}" "${PIEOS_GAMES}" "${PIEOS_ROMS}" \
+    "${PIEOS_CONFIG}" "${PIEOS_CACHE}" "${PIEOS_THEME}"
+
+# Configurar variáveis gráficas
+export DISPLAY=:0
+export XAUTHORITY="${PIEOS_HOME}/.Xauthority"
+
+# Configurar Qt5 para tela cheia e performance
+export QT_QPA_PLATFORM=xcb
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_SCALE_FACTOR=1
+export QT_QUICK_BACKEND=software
+export QT_QPA_FONTDIR=/usr/share/fonts
+
+# Configurar gamepad
+export SDL_JOYSTICK_DEVICE=/dev/input
+export EVDEV_JOYSTICK_DEVICE=/dev/input
+
+# Otimizações para hardware fraco (Intel HD Graphics 3000)
+export INTEL_DEBUG=nohiz
+export MESA_GL_VERSION_OVERRIDE=3.3
+export MESA_GLSL_VERSION_OVERRIDE=330
+export LIBGL_ALWAYS_SOFTWARE=0
+
+# Iniciar Xorg (se não estiver rodando)
+if ! pgrep -x Xorg > /dev/null 2>&1; then
+    echo "Iniciando Xorg..."
+    startx &>/dev/null &
+    sleep 2
+fi
+
+# Aguardar Xorg ficar pronto
+for i in {1..10}; do
+    if xset q &>/dev/null; then
+        echo "Xorg pronto."
+        break
+    fi
+    sleep 0.5
+done
+
+# Iniciar a interface PieOS Shell
+echo "Iniciando PieOS Shell..."
+cd /usr/share/pieos/shell
+
+# Executar com possibilidade de fallback
+if command -v python3 &>/dev/null; then
+    exec python3 main.py
+else
+    echo "ERRO: Python3 não encontrado!"
+    exit 1
+fi

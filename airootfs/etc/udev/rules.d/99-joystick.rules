@@ -1,0 +1,32 @@
+# Pie OS - Joystick/Gamepad udev rules
+# Suporte universal para joysticks USB e wireless
+
+# USB HID joystick/gamepad - permissão para usuário pieos
+SUBSYSTEM=="input", ATTRS{id/vendor}=="*", ATTRS{id/product}=="*", ENV{ID_INPUT_JOYSTICK}=="1", MODE="0666"
+
+# Xbox 360/One controllers (USB)
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02a1", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02d1", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02dd", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+
+# Xbox 360 Wireless
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02a9", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0719", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+
+# PS3/PS4/PS5 controllers (USB e Bluetooth)
+SUBSYSTEM=="input", ATTRS{idVendor}=="054c", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+
+# Nintendo Switch Pro Controller
+SUBSYSTEM=="input", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+
+# Logitech F310/F710
+SUBSYSTEM=="input", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c21d", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+SUBSYSTEM=="input", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c21f", MODE="0666", ENV{ID_INPUT_JOYSTICK}="1"
+
+# Genéricos - dar permissão para qualquer joystick identificado
+KERNEL=="js[0-9]*", MODE="0666"
+KERNEL=="event[0-9]*", SUBSYSTEM=="input", ATTRS{id/vendor}=="*", ENV{ID_INPUT_JOYSTICK}=="1", MODE="0666"
+
+# Forçar carregamento do driver xpad para controllers Xbox
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e|02a1|02d1|02dd|02a9|0719", RUN+="/sbin/modprobe xpad"

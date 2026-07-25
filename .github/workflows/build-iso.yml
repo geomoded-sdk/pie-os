@@ -1,0 +1,36 @@
+name: Build Pie OS ISO
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arch Linux
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          echo "ParallelDownloads = 5" >> /etc/pacman.conf
+          pacman -Sy --noconfirm archiso base-devel git squashfs-tools xorriso
+          pacman -Scc --noconfirm
+
+      - name: Build ISO
+        run: |
+          mkdir -p out
+          ./build.sh build
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: pieos-iso
+          path: out/*.iso
+          compression-level: 0

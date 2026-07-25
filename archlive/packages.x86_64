@@ -1,0 +1,106 @@
+# Pie OS - Pacotes base do sistema live
+# Arch Linux x86_64
+
+# === BASE ===
+base
+base-devel
+linux
+linux-firmware
+linux-headers
+
+# === BOOT ===
+grub
+efibootmgr
+os-prober
+
+# === REDE ===
+networkmanager
+wpa_supplicant
+wireless_tools
+dhcpcd
+
+# === GRÁFICOS ===
+xorg-server
+xorg-xinit
+xorg-xrandr
+xorg-xset
+mesa
+mesa-demos
+libgl
+xf86-video-intel
+vulkan-intel
+intel-media-driver
+
+# === ÁUDIO ===
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+alsa-utils
+
+# === INTERFACE ===
+python
+python-pyqt5
+python-pyqtwebengine
+python-evdev
+python-pygame
+qt5-base
+qt5-svg
+qt5-graphicaleffects
+qt5-quickcontrols
+qt5-quickcontrols2
+
+# === FONTES ===
+ttf-dejavu
+ttf-liberation
+noto-fonts
+ttf-ubuntu-font-family
+
+# === SISTEMA ===
+plymouth
+acpi
+acpid
+lm_sensors
+fancontrol
+htop
+openssh
+nano
+vim
+sudo
+which
+
+# === CONTROLES ===
+joystick
+xf86-input-joystick
+steam-devices
+linuxconsole
+
+# === EMULAÇÃO / GAMES ===
+wine
+wine-mono
+winetricks
+lutris
+gamemode
+lib32-gamemode
+mangohud
+lib32-mangohud
+
+# === FERRAMENTAS ===
+git
+wget
+curl
+unzip
+zip
+p7zip
+ntfs-3g
+exfat-utils
+dosfstools
+gparted
+hardinfo
+neofetch
+
+# === OTIMIZAÇÕES ===
+preload
+irqbalance
+cpupower
+tlp

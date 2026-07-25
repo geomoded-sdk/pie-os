@@ -1,0 +1,163 @@
+//=============================================================================
+// Pie OS - Plymouth Boot Animation Script
+// Tema: Xbox 360 Blades Style
+// Cor: Verde claro (#A8D854) com fundo escuro
+//=============================================================================
+
+// Configurações de tela
+Screen.Width  = Window.GetWidth();
+Screen.Height = Window.GetHeight();
+CenterX = Screen.Width / 2;
+CenterY = Screen.Height / 2;
+
+// Cores do tema
+Theme.Colors =
+{
+    Background = "#1a1a2e",
+    Accent     = "#A8D854",
+    Light      = "#C8F066",
+    Dark       = "#6B8E23",
+    White      = "#FFFFFF",
+    Fade       = "#2a2a4e"
+};
+
+// Logo central
+Logo = Image("logo.png");
+Logo.X = CenterX - Logo.Width / 2;
+Logo.Y = CenterY - Logo.Height / 2 - 50;
+Logo.Opacity = 0.0;
+Logo.Z = 10;
+
+// Círculo giratório (estilo Xbox 360)
+Ring = Sprite();
+Ring.SetPosition(CenterX, CenterY + 60);
+Ring.SetOpacity(0.0);
+Ring.SetZ(20);
+
+// Barras de progresso estilo blades do Xbox 360
+BladeWidth  = 4;
+BladeHeight = 30;
+BladeSpacing = 10;
+TotalBladeWidth = 5 * BladeWidth + 4 * BladeSpacing;
+BladeStartX = CenterX - TotalBladeWidth / 2;
+BladeY = CenterY + 100;
+
+for (i = 0; i < 5; i++)
+{
+    Blade = Sprite();
+    Blade.SetPosition(BladeStartX + i * (BladeWidth + BladeSpacing), BladeY);
+    Blade.SetWidth(BladeWidth);
+    Blade.SetHeight(BladeHeight);
+    Blade.SetColor(0.659, 0.847, 0.329);  // #A8D854
+    Blade.SetOpacity(0.3 + i * 0.15);
+    Blade.SetZ(5);
+
+    // Animação de pulsação
+    for (t = 0; t < 60; t++)
+    {
+        progress = t / 60.0;
+        phase = (i / 5.0 + progress) % 1.0;
+        height = BladeHeight * (0.5 + 0.5 * Math.Sin(phase * 2 * Math.PI));
+        if (height < 5) height = 5;
+        Blade.SetHeight(height);
+
+        // Efeito de cor que acende
+        bright = 0.5 + 0.5 * Math.Sin(phase * 2 * Math.PI);
+        if (bright < 0) bright = 0;
+        Blade.SetColor(
+            0.659 + 0.1 * bright,
+            0.847 + 0.1 * bright,
+            0.329 + 0.1 * bright
+        );
+    }
+}
+
+// Texto "Pie OS" com fade in
+Title = Text("Pie OS");
+Title.SetFontName("Arial Bold");
+Title.SetFontSize(42);
+Title.SetColor(1.0, 1.0, 1.0);
+Title.SetPosition(CenterX, CenterY - 120);
+Title.SetOpacity(0.0);
+Title.SetZ(15);
+
+// Subtítulo
+Subtitle = Text("PieBox Console System");
+Subtitle.SetFontName("Arial");
+Subtitle.SetFontSize(16);
+Subtitle.SetColor(0.659, 0.847, 0.329);
+Subtitle.SetPosition(CenterX, CenterY - 85);
+Subtitle.SetOpacity(0.0);
+Subtitle.SetZ(15);
+
+// Mensagem de status
+Status = Text("Inicializando...");
+Status.SetFontName("Arial");
+Status.SetFontSize(14);
+Status.SetColor(0.7, 0.7, 0.7);
+Status.SetPosition(CenterX, CenterY + 140);
+Status.SetOpacity(0.0);
+Status.SetZ(15);
+
+// Sequência de animação
+fun animation
+{
+    // Fade in do logo
+    Logo.SetOpacity(0.0);
+    Logo.SetScale(0.5, 0.5);
+
+    for (t = 0; t < 30; t++)
+    {
+        progress = t / 30.0;
+        Logo.SetOpacity(progress);
+        Logo.SetScale(0.5 + 0.5 * progress, 0.5 + 0.5 * progress);
+        Plymouth.Sleep(0.03);
+    }
+
+    // Fade in do título
+    for (t = 0; t < 20; t++)
+    {
+        progress = t / 20.0;
+        Title.SetOpacity(progress);
+        Subtitle.SetOpacity(progress);
+        Ring.SetOpacity(progress);
+        Plymouth.Sleep(0.03);
+    }
+
+    // Mostrar status
+    Status.SetOpacity(1.0);
+}
+
+// Atualizar status durante boot
+fun refresh
+{
+    message = Plymouth.GetMessage();
+    if (message)
+    {
+        Status.SetText(message);
+        if (message == "Carregando kernel..." ||
+            message == "Iniciando serviços..." ||
+            message == "Preparando Pie OS...")
+        {
+            Status.SetColor(0.659, 0.847, 0.329);
+        }
+    }
+}
+
+// Animação de desligamento
+fun shutdown
+{
+    for (t = 0; t < 20; t++)
+    {
+        progress = 1.0 - (t / 20.0);
+        Logo.SetOpacity(progress);
+        Title.SetOpacity(progress);
+        Subtitle.SetOpacity(progress);
+        Plymouth.Sleep(0.03);
+    }
+
+    Status.SetText("Desligando...");
+    Status.SetColor(0.7, 0.3, 0.3);
+}
+
+animation();
