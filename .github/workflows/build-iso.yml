@@ -8,29 +8,27 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      options: --cap-add=SYS_ADMIN
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Arch Linux
+      - name: Build ISO in Arch Linux container
         run: |
-          pacman-key --init
-          pacman-key --populate archlinux
-          echo "keyserver hkp://keyserver.ubuntu.com:80" >> /etc/pacman.d/gnupg/gpg.conf
-          echo "ParallelDownloads = 5" >> /etc/pacman.conf
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm archiso base-devel git squashfs-tools xorriso
-        shell: bash
-
-      - name: Build ISO
-        run: |
-          chmod +x build.sh
-          bash build.sh build
-        shell: bash
+          docker run --privileged --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            archlinux:latest \
+            bash -c '
+              pacman-key --init
+              pacman-key --populate archlinux
+              echo "keyserver hkp://keyserver.ubuntu.com:80" >> /etc/pacman.d/gnupg/gpg.conf
+              echo "ParallelDownloads = 5" >> /etc/pacman.conf
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm archiso base-devel git squashfs-tools xorriso
+              mkdir -p out
+              bash build.sh build
+            '
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
@@ -38,3 +36,4 @@ jobs:
           name: pieos-iso
           path: out/*.iso
           compression-level: 0
+          if-no-files-found: error
