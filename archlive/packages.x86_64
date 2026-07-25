@@ -11,6 +11,12 @@ linux-headers
 # === BOOT ===
 grub
 efibootmgr
+syslinux
+edk2-shell
+memtest86+
+memtest86+-efi
+amd-ucode
+intel-ucode
 os-prober
 
 # === REDE ===
@@ -25,7 +31,6 @@ xorg-xinit
 xorg-xrandr
 xorg-xset
 mesa
-mesa-demos
 libgl
 xf86-video-intel
 vulkan-intel
@@ -41,33 +46,23 @@ alsa-utils
 # === INTERFACE ===
 python
 python-pyqt5
-python-pyqtwebengine
 python-evdev
-python-pygame
 qt5-base
 qt5-svg
-qt5-graphicaleffects
-qt5-quickcontrols
-qt5-quickcontrols2
 
 # === FONTES ===
 ttf-dejavu
 ttf-liberation
 noto-fonts
-ttf-ubuntu-font-family
 
 # === SISTEMA ===
 plymouth
 acpi
 acpid
-lm_sensors
-fancontrol
-htop
-openssh
-nano
-vim
 sudo
 which
+htop
+nano
 
 # === CONTROLES ===
 joystick
@@ -75,15 +70,12 @@ xf86-input-joystick
 steam-devices
 linuxconsole
 
-# === EMULAÇÃO / GAMES ===
-wine
-wine-mono
-winetricks
-lutris
+# === GAMES / EMULAÇÃO ===
 gamemode
 lib32-gamemode
-mangohud
-lib32-mangohud
+lutris
+wine
+wine-mono
 
 # === FERRAMENTAS ===
 git
@@ -93,14 +85,5 @@ unzip
 zip
 p7zip
 ntfs-3g
-exfat-utils
 dosfstools
-gparted
-hardinfo
 neofetch
-
-# === OTIMIZAÇÕES ===
-preload
-irqbalance
-cpupower
-tlp
