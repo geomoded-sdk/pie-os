@@ -1,0 +1,7 @@
+out/
+work/
+archlive/airootfs/
+*.iso
+*.img
+__pycache__/
+*.pyc

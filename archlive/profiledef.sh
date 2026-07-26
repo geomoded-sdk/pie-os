@@ -4,13 +4,13 @@
 set -euo pipefail
 
 iso_name="pieos"
-iso_label="PIEOS_$(date +%Y%m)"
+iso_label="PIEOS"
 iso_publisher="PieBox Systems"
 iso_application="Pie OS - Console Operating System"
 iso_version="1.0.0"
 install_dir="arch"
 buildmodes=('iso')
-bootmodes=('bios.syslinux' 'uefi.grub')
+bootmodes=('bios.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
