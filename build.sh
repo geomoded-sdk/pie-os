@@ -28,7 +28,7 @@ clean() {
 }
 
 check_deps() {
-    local deps=("mkarchiso" "xorriso" "mksquashfs" "grub-mkstandalone")
+    local deps=("mkarchiso" "xorriso" "mksquashfs")
     for dep in "${deps[@]}"; do
         if ! command -v "${dep}" &>/dev/null && ! command -v "/usr/bin/${dep}" &>/dev/null; then
             err "${dep} não encontrado. Instale archiso e grub: sudo pacman -S archiso grub"
@@ -67,7 +67,7 @@ build_iso() {
         local iso_file=$(ls "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
         log "ISO gerada com sucesso: ${iso_file}"
         log "Tamanho: $(du -h "${iso_file}" | cut -f1)"
-        log "Boot modes: bios.syslinux + uefi-x64.grub"
+        log "Boot mode: bios.syslinux"
         log ""
         log "Para gravar em USB, use balenaEtcher ou:"
         log "  sudo dd if=${iso_file} of=/dev/sdX bs=4M status=progress"
