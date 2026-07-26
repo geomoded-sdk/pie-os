@@ -135,13 +135,13 @@ insmod search_fs_label
 search --no-floppy --set=root --label PIEOS
 
 menuentry "Pie OS" {
-    linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=PIEOS splash quiet vt.global_cursor_default=0 loglevel=3
+    linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=PIEOS loglevel=3 i915.modeset=1
     initrd /arch/boot/x86_64/intel-ucode.img /arch/boot/x86_64/initramfs-linux.img
 }
 
 menuentry "Pie OS (modo seguro)" {
     linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=PIEOS loglevel=3 nomodeset
-    initrd /arch/boot/x86_64/initramfs-linux.img
+    initrd /arch/boot/x86_64/intel-ucode.img /arch/boot/x86_64/initramfs-linux.img
 }
 
 menuentry "Desligar" { halt }
