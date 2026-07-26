@@ -174,7 +174,7 @@ GRUBEOF
 post_build() {
     local iso_file=$(ls "${OUT_DIR}"/*.iso 2>/dev/null | head -1)
     if [ -n "${iso_file}" ]; then
-        log "ISO original (BIOS/GRUB): ${iso_file}"
+        log "ISO original (BIOS/syslinux): ${iso_file}"
         log "Tamanho: $(du -h "${iso_file}" | cut -f1)"
 
         # Criar ISO híbrida com GRUB
