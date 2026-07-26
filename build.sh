@@ -57,14 +57,21 @@ build_iso() {
 
     mkdir -p "${OUT_DIR}"
 
-    log "Executando mkarchiso..."
-    mkarchiso -v -w "${WORK_DIR}" -o "${OUT_DIR}" "${profile_dir}"
-
-    if [ $? -eq 0 ]; then
+    log "Executando mkarchiso..."    
+    set +e
+    mkarchiso -v -w "${WORK_DIR}" -o "${OUT_DIR}" "${profile_dir}" 2>&1
+    local rc=$?
+    set -e
+    if [ $rc -eq 0 ]; then
         log "ISO gerada com sucesso em: ${OUT_DIR}"
         ls -lh "${OUT_DIR}"/*.iso
     else
-        err "Falha ao gerar ISO. Verifique os logs."
+        if [ -f "${WORK_DIR}/x86_64/efiboot/grub/grub.cfg" ]; then
+            echo "GRUB CONFIG:"
+            cat "${WORK_DIR}/x86_64/efiboot/grub/grub.cfg"
+        fi
+        ls -la "${WORK_DIR}/x86_64/efiboot/" 2>/dev/null || echo "efiboot dir nao existe"
+        err "Falha no mkarchiso ao configurar UEFI GRUB"
     fi
 }
 
