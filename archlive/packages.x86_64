@@ -30,7 +30,6 @@ xorg-xrandr
 xorg-xset
 mesa
 libgl
-xf86-video-intel
 vulkan-intel
 intel-media-driver
 
@@ -54,7 +53,6 @@ ttf-liberation
 noto-fonts
 
 # === SISTEMA ===
-plymouth
 acpi
 acpid
 sudo
